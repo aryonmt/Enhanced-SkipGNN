@@ -15,7 +15,7 @@ FIGURES_DIR = REPO_ROOT / "figures"
 CONFIGS_DIR = REPO_ROOT / "configs"
 
 SKIPGNN_REPO = "https://github.com/kexinhuang12345/SkipGNN.git"
-GITHUB_REPO = "https://github.com/aryonmt/finalProject.git"
+GITHUB_REPO = "https://github.com/aryonmt/Enhanced-SkipGNN.git"
 
 DATASET_SPECS: dict[str, dict[str, Any]] = {
     "DDI": {

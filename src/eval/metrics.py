@@ -13,7 +13,16 @@ def find_optimal_f1_threshold(
     val_labels: np.ndarray,
     n_steps: int = 91,
 ) -> float:
-    """Select F1 threshold on validation only. Never pass test labels here."""
+    """Select the F1 threshold on validation scores only.
+
+    Args:
+        val_probs: 1-D predicted probabilities.
+        val_labels: 1-D labels, same length as ``val_probs``.
+        n_steps: Number of candidate thresholds on ``[0.05, 0.95]``.
+
+    Returns:
+        Earliest grid point in ``linspace(0.05, 0.95, n_steps)`` with the highest F1.
+    """
     thresholds = np.linspace(0.05, 0.95, n_steps)
     best_f1 = -1.0
     best_t = 0.5
@@ -33,7 +42,16 @@ def evaluate_at_threshold(
     labels: np.ndarray,
     threshold: float = 0.5,
 ) -> dict[str, float]:
-    """AUROC, AUPRC, F1, and Brier score at a frozen threshold."""
+    """AUROC, AUPRC, F1, and Brier score at a frozen threshold.
+
+    Args:
+        probs: 1-D predicted probabilities.
+        labels: 1-D labels, same length as ``probs``.
+        threshold: Cutoff for the F1 prediction. Ranking metrics ignore it.
+
+    Returns:
+        Dict with ``auroc``, ``auprc``, ``f1``, ``brier``, and ``threshold``.
+    """
     probs = np.asarray(probs, dtype=np.float64)
     labels = np.asarray(labels, dtype=np.int32)
     preds = (probs >= threshold).astype(np.int32)
@@ -54,7 +72,21 @@ def evaluate_dual_bank(
     hard_probs: np.ndarray,
     hard_labels: np.ndarray,
 ) -> dict[str, Any]:
-    """Fit τ* on validation F1, then score uniform and hard test banks."""
+    """Fit τ* on validation F1, then score uniform and hard test banks.
+
+    Args:
+        val_probs: 1-D validation probabilities.
+        val_labels: 1-D validation labels.
+        test_probs: 1-D uniform-test probabilities.
+        test_labels: 1-D uniform-test labels.
+        hard_probs: 1-D hard-bank probabilities.
+        hard_labels: 1-D hard-bank labels.
+
+    Returns:
+        ``tau_star`` plus, for ``val``, ``test_uniform``, and ``test_hard``,
+        the dicts ``<name>@0.5`` and ``<name>@tau`` from
+        :func:`evaluate_at_threshold`.
+    """
     tau = find_optimal_f1_threshold(val_probs, val_labels)
     out: dict[str, Any] = {"tau_star": tau}
     for name, probs, labels in (

@@ -1,3 +1,5 @@
+"""Unsupervised neighborhood scores for link prediction."""
+
 from __future__ import annotations
 
 import numpy as np
@@ -49,7 +51,21 @@ def compute_heuristic_scores(
     method: str = "resource_allocation",
     bipartite: bool = False,
 ) -> np.ndarray:
-    """Unsupervised link scores. Bipartite graphs use 3-walk RA (1-hop CN is empty)."""
+    """Unsupervised link scores. Bipartite graphs use 3-walk RA (1-hop CN is empty).
+
+    Args:
+        adj: Undirected adjacency. Converted to CSR float32 inside.
+        pairs: Endpoint indices, integer ``[P, 2]``.
+        method: One of ``common_neighbors``, ``jaccard``, ``adamic_adar``,
+            ``resource_allocation``. Used only when ``bipartite`` is false.
+        bipartite: Score 3-walks instead of 1-hop overlap.
+
+    Returns:
+        Scores ``[P]`` float32, aligned with ``pairs``.
+
+    Raises:
+        ValueError: Unknown ``method`` on a non-bipartite graph.
+    """
     csr = adj.tocsr().astype(np.float32)
     if bipartite:
         return _bipartite_three_walk_scores(csr, pairs)

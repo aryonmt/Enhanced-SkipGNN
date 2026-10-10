@@ -175,7 +175,31 @@ def load_dataset_splits(
     input_type: str = "one_hot",
     device: torch.device | None = None,
 ) -> DatasetBundle:
-    """Load leak-free splits. Adjacency is built from train positives only."""
+    """Load leak-free splits. Adjacency is built from train positives only.
+
+    Reads ``train.csv``, ``val.csv``, ``test.csv``, and the entity table under
+    ``data_dir`` (default ``data/raw/<DATASET>``). Laplacian tensors are
+    normalized from the train-positive graph. Val and test edges are stored
+    as pairs and never added to that graph.
+
+    Args:
+        dataset_name: One of ``DTI``, ``DDI``, ``PPI``, ``GDI`` (case-insensitive).
+        data_dir: Directory with the fold CSVs. Defaults to the raw data root.
+        input_type: ``one_hot`` uses a sparse identity ``[N, N]``. ``node2vec``
+            (alias ``node_2vec``) loads the dataset embedding file and
+            column-zscores it to dense ``[N, F]``.
+        device: Device for feature and Laplacian tensors. Defaults to CPU.
+
+    Returns:
+        Bundle whose split pair arrays are int64 ``[E, 2]`` with aligned labels
+        ``[E]``, and whose operators ``f_orig``, ``f_skip_bin``,
+        ``f_skip_weighted``, and ``f_3hop`` are sparse COO ``[N, N]``.
+
+    Raises:
+        ValueError: Unknown dataset name, or pair columns cannot be inferred.
+        FileNotFoundError: Missing data directory or node2vec file.
+        RuntimeError: Node or source counts disagree with the dataset spec.
+    """
     name = dataset_name.upper()
     if name not in DATASET_SPECS:
         raise ValueError(f"Unknown dataset {dataset_name}")

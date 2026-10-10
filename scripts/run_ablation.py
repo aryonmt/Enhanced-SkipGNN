@@ -1,3 +1,5 @@
+"""Four-step AMS ablation on one dataset."""
+
 from __future__ import annotations
 
 import argparse

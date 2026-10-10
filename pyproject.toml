@@ -7,7 +7,7 @@ name = "ams-skipgnn"
 version = "0.1.0"
 description = "AMS-SkipGNN: Attentive Multi-Scale Skip Graph Neural Networks for molecular interaction prediction"
 readme = "README.md"
-requires-python = ">=3.10"
+requires-python = ">=3.10,<3.13"
 dependencies = [
   "torch>=2.1",
   "numpy>=1.24",

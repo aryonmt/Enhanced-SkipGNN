@@ -1,5 +1,7 @@
 .venv/
 venv/
+env/
+ENV/
 __pycache__/
 *.py[cod]
 *$py.class
@@ -13,6 +15,7 @@ build/
 .ipynb_checkpoints/
 .DS_Store
 Thumbs.db
+desktop.ini
 .cursor/
 
 # data caches and embeddings (CSV splits are tracked)
@@ -46,6 +49,7 @@ checkpoints/
 *.ckpt
 runs/
 wandb/
+*.log
 figures/*
 !figures/.gitkeep
 !figures/README.md

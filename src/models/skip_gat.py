@@ -1,6 +1,6 @@
-from __future__ import annotations
-
 """SkipGATv2 with chunked sparse attention so GDI-scale skip graphs fit on a T4."""
+
+from __future__ import annotations
 
 import os
 
@@ -162,7 +162,11 @@ class _ChunkedSparseGATv2(torch.autograd.Function):
 
 
 class SparseGATv2Layer(nn.Module):
-    """Edge-sparse GATv2: attention on COO edges, O(E) memory."""
+    """Edge-sparse GATv2: attention on COO edges, O(E) memory.
+
+    Uses the vectorized softmax when the score tensor would fit in
+    ``GAT_VECTORIZED_MAX_BYTES``; otherwise the chunked autograd path.
+    """
 
     def __init__(
         self,
@@ -171,7 +175,19 @@ class SparseGATv2Layer(nn.Module):
         heads: int = 4,
         dropout: float = 0.5,
         negative_slope: float = 0.2,
-    ):
+    ) -> None:
+        """Build source/destination projections and the attention vector.
+
+        Args:
+            in_features: Input width ``F``.
+            out_features: Output width. Must be divisible by ``heads``.
+            heads: Number of attention heads.
+            dropout: Attention dropout probability, applied only while training.
+            negative_slope: LeakyReLU slope on the pre-attention sum.
+
+        Raises:
+            ValueError: ``out_features`` is not divisible by ``heads``.
+        """
         super().__init__()
         if out_features % heads != 0:
             raise ValueError("out_features must be divisible by heads")
@@ -186,6 +202,7 @@ class SparseGATv2Layer(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
+        """Xavier-uniform projections and attention vector; zero bias."""
         nn.init.xavier_uniform_(self.w_src.weight)
         nn.init.xavier_uniform_(self.w_dst.weight)
         nn.init.xavier_uniform_(self.attn_vec)
@@ -197,6 +214,18 @@ class SparseGATv2Layer(nn.Module):
         return layer(x)
 
     def forward(self, x: torch.Tensor, adj_sparse: torch.Tensor) -> torch.Tensor:
+        """Attend over COO edges and return concatenated heads.
+
+        Args:
+            x: Node features, dense or sparse ``[N, in_features]``.
+            adj_sparse: Sparse adjacency ``[N, N]``. Coalesced to COO if needed.
+
+        Returns:
+            Node states ``[N, out_features]``.
+
+        Raises:
+            TypeError: ``adj_sparse`` is dense.
+        """
         if not adj_sparse.is_sparse:
             raise TypeError("SparseGATv2Layer expects a sparse COO adjacency")
         adj = adj_sparse if adj_sparse.is_coalesced() else adj_sparse.coalesce()
@@ -237,7 +266,13 @@ class SparseGATv2Layer(nn.Module):
 
 
 class SkipGATv2(nn.Module):
-    """Gated original/skip encoder with sparse GATv2 instead of static Laplacian GCN."""
+    """Gated original/skip encoder with sparse GATv2 instead of static Laplacian GCN.
+
+    The decoder concatenates ``[e_u, e_v, e_u * e_v, |e_u - e_v|]``.
+
+    Attributes:
+        skip_kind: ``"weighted"``.
+    """
 
     skip_kind = "weighted"
 
@@ -249,7 +284,17 @@ class SkipGATv2(nn.Module):
         nhid_dec: int,
         dropout: float = 0.5,
         heads: int = 4,
-    ):
+    ) -> None:
+        """Build the gated GATv2 stack and the 4-way decoder.
+
+        Args:
+            nfeat: Input feature width ``F``.
+            nhid1: Width after the first gated layer. Must be divisible by ``heads``.
+            nhid2: Embedding width. Must be divisible by ``heads``.
+            nhid_dec: Hidden width of the pair decoder.
+            dropout: Dropout on attention and on the decoder hidden state.
+            heads: Attention heads in every ``SparseGATv2Layer``.
+        """
         super().__init__()
         self.dropout = dropout
         self.o_gat1 = SparseGATv2Layer(nfeat, nhid1, heads=heads, dropout=dropout)
@@ -265,6 +310,16 @@ class SkipGATv2(nn.Module):
         self.decoder_fc2 = nn.Linear(nhid_dec, 1)
 
     def encode(self, x: torch.Tensor, adj: torch.Tensor, adj_skip: torch.Tensor) -> torch.Tensor:
+        """Fuse original-graph and skip-graph GATv2 layers into node embeddings.
+
+        Args:
+            x: Node features, dense or sparse ``[N, F]``.
+            adj: Normalized original adjacency, sparse ``[N, N]``.
+            adj_skip: Normalized skip operator, sparse ``[N, N]``.
+
+        Returns:
+            Node embeddings ``[N, nhid2]``.
+        """
         h_o1 = self.o_gat1(x, adj)
         h_so1 = self.so_gat1(x, adj_skip)
         g1 = torch.sigmoid(self.gate1(torch.cat((h_o1, h_so1), dim=-1)))
@@ -278,6 +333,15 @@ class SkipGATv2(nn.Module):
         return g2 * h_o2 + (1.0 - g2) * h_so2
 
     def decode(self, emb: torch.Tensor, pairs: torch.Tensor) -> torch.Tensor:
+        """Score pairs with the 4-way decoder.
+
+        Args:
+            emb: Node embeddings ``[N, nhid2]``.
+            pairs: Endpoint indices, long ``[B, 2]``.
+
+        Returns:
+            Link logits ``[B]``.
+        """
         e_u, e_v = emb[pairs[:, 0]], emb[pairs[:, 1]]
         z = torch.cat((e_u, e_v, e_u * e_v, torch.abs(e_u - e_v)), dim=-1)
         h = F.relu(self.decoder_bn(self.decoder_fc1(z)))
@@ -291,6 +355,20 @@ class SkipGATv2(nn.Module):
         pairs: torch.Tensor,
         adj_skip: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Encode the graph and score ``pairs``.
+
+        Args:
+            x: Node features, dense or sparse ``[N, F]``.
+            adj: Normalized original adjacency, sparse ``[N, N]``.
+            pairs: Endpoint indices, long ``[B, 2]``.
+            adj_skip: Normalized skip operator, sparse ``[N, N]``.
+
+        Returns:
+            Logits ``[B]`` and node embeddings ``[N, nhid2]``.
+
+        Raises:
+            ValueError: ``adj_skip`` is missing.
+        """
         if adj_skip is None:
             raise ValueError("SkipGATv2 requires adj_skip")
         emb = self.encode(x, adj, adj_skip)

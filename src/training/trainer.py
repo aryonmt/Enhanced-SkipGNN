@@ -18,7 +18,11 @@ from src.eval.metrics import evaluate_dual_bank
 
 
 def set_seed(seed: int) -> None:
-    """Seed Python, NumPy, and Torch (CPU and CUDA)."""
+    """Seed Python, NumPy, and Torch (CPU and all CUDA devices).
+
+    Args:
+        seed: Integer seed applied to ``random``, NumPy, and ``torch``.
+    """
     random.seed(seed)
     np.random.seed(seed)
     torch.manual_seed(seed)
@@ -69,7 +73,17 @@ def predict_probs(
     pairs: np.ndarray,
     batch_size: int = 2048,
 ) -> np.ndarray:
-    """Score pairs. Encodes the graph once, then decodes in batches."""
+    """Score pairs. Encodes the graph once, then decodes in batches.
+
+    Args:
+        model: Encoder with ``encode`` / ``decode`` and a ``skip_kind`` attribute.
+        bundle: Graph and feature tensors. Scores are computed on ``bundle.features.device``.
+        pairs: Endpoint indices, integer ``[P, 2]``.
+        batch_size: Decoder batch size.
+
+    Returns:
+        Sigmoid probabilities ``[P]``. Empty input yields shape ``[0]``.
+    """
     model.eval()
     device = bundle.features.device
     skip = _skip_matrix(bundle, model)
@@ -84,7 +98,15 @@ def predict_probs(
 
 @torch.no_grad()
 def extract_node_embeddings(model: torch.nn.Module, bundle: DatasetBundle) -> np.ndarray:
-    """Return (n_nodes, d) embeddings from the trained encoder."""
+    """Return node embeddings from one encoder pass.
+
+    Args:
+        model: Trained encoder.
+        bundle: Graph the encoder reads (``features``, ``f_orig``, and the skip tensor).
+
+    Returns:
+        Float array ``[N, D]`` on CPU, with ``D`` the encoder width.
+    """
     model.eval()
     skip = _skip_matrix(bundle, model)
     emb, _, _ = _encode_outputs(model, bundle, skip)
@@ -111,8 +133,27 @@ def train_one_model(
     and a hard negative bank sampled from the train graph only.
 
     Default matches AMS/SkipGNN: encode the graph on every decoder batch so
-    Adam sees one step per minibatch. `encode_once=True` is a speed hack
+    Adam sees one step per minibatch. ``encode_once=True`` is a speed hack
     (one encoder step per epoch) and underfits GDI-scale models.
+
+    Args:
+        model: Encoder/decoder moved onto ``bundle.features.device``.
+        bundle: Leak-free graph and train/val/test pairs.
+        epochs: Maximum training epochs.
+        batch_size: Pair minibatch size. The last incomplete batch is dropped.
+        lr: Adam learning rate.
+        weight_decay: Adam weight decay.
+        patience: Epochs without a val-AUPRC improvement before stopping.
+        grad_clip: Global gradient-norm clip.
+        seed: Seed passed to :func:`set_seed` and to hard-negative sampling.
+        log_fn: Optional line logger. Defaults to ``print``.
+        encode_once: One encoder backward per epoch when true; per batch when false.
+
+    Returns:
+        Dual-bank metric dict from :func:`evaluate_dual_bank`, plus
+        ``best_val_auprc``, ``history`` (epoch, loss, val AUPRC),
+        ``hard_pairs`` ``[P, 2]``, ``hard_labels`` ``[P]``, ``hard_probs`` ``[P]``,
+        and ``test_probs`` ``[E_test]``.
     """
     set_seed(seed)
     device = bundle.features.device

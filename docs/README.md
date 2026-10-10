@@ -1,6 +1,6 @@
 # Documentation index
 
-Start at the [root README](../README.md). Then:
+Enhanced-SkipGNN is the repository: one leak-free training protocol and seven predictors (`gcn`, `skipgnn`, `ams`, `heuristic`, `gat`, `3hop`, `contrastive`). `ams` is one encoder in that set. Start at the [root README](../README.md). Then:
 
 1. [repository-layout.md](repository-layout.md) — where files live
 2. [architecture.md](architecture.md) — how training is wired

@@ -1,5 +1,8 @@
+"""Path-attention SkipGNN over 1-hop, 2-hop, and 3-hop operators."""
+
 from __future__ import annotations
 
+import scipy.sparse as sp
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
@@ -9,7 +12,14 @@ from src.models.layers import SparseGraphConvolution
 
 
 class ThreeHopSkipGNN(nn.Module):
-    """Fuses 1-hop, 2-hop (same-type skip), and 3-hop return walks with path attention."""
+    """Fuses 1-hop, 2-hop (same-type skip), and 3-hop return walks with path attention.
+
+    ``forward`` expects ``adj_skip=(f_2hop, f_3hop)``. The decoder concatenates
+    ``[e_u, e_v, e_u * e_v, |e_u - e_v|]``.
+
+    Attributes:
+        skip_kind: ``"three_hop_bundle"``.
+    """
 
     skip_kind = "three_hop_bundle"
 
@@ -20,7 +30,16 @@ class ThreeHopSkipGNN(nn.Module):
         nhid2: int,
         nhid_dec: int,
         dropout: float = 0.5,
-    ):
+    ) -> None:
+        """Build the three path convolutions, attention vectors, and decoder.
+
+        Args:
+            nfeat: Input feature width ``F``.
+            nhid1: Width after the first path fusion.
+            nhid2: Embedding width.
+            nhid_dec: Hidden width of the pair decoder.
+            dropout: Dropout probability after the first fusion and in the decoder.
+        """
         super().__init__()
         self.dropout = dropout
         self.gc_1hop_1 = SparseGraphConvolution(nfeat, nhid1)
@@ -37,6 +56,7 @@ class ThreeHopSkipGNN(nn.Module):
         self.reset_parameters()
 
     def reset_parameters(self) -> None:
+        """Xavier-uniform path-attention vectors, shape ``[3, H]``."""
         nn.init.xavier_uniform_(self.path_attn_vec1)
         nn.init.xavier_uniform_(self.path_attn_vec2)
 
@@ -65,6 +85,17 @@ class ThreeHopSkipGNN(nn.Module):
         f2: torch.Tensor,
         f3: torch.Tensor,
     ) -> torch.Tensor:
+        """Fuse the three normalized walk operators into node embeddings.
+
+        Args:
+            x: Node features, dense or sparse ``[N, F]``.
+            f1: Normalized 1-hop operator, sparse ``[N, N]``.
+            f2: Normalized 2-hop operator, sparse ``[N, N]``.
+            f3: Normalized 3-hop operator, sparse ``[N, N]``.
+
+        Returns:
+            Node embeddings ``[N, nhid2]``.
+        """
         fused1 = self._path_fuse(
             F.relu(self.gc_1hop_1(x, f1)),
             F.relu(self.gc_2hop_1(x, f2)),
@@ -80,6 +111,15 @@ class ThreeHopSkipGNN(nn.Module):
         )
 
     def decode(self, emb: torch.Tensor, pairs: torch.Tensor) -> torch.Tensor:
+        """Score pairs with the 4-way decoder.
+
+        Args:
+            emb: Node embeddings ``[N, nhid2]``.
+            pairs: Endpoint indices, long ``[B, 2]``.
+
+        Returns:
+            Link logits ``[B]``.
+        """
         e_u, e_v = emb[pairs[:, 0]], emb[pairs[:, 1]]
         z = torch.cat((e_u, e_v, e_u * e_v, torch.abs(e_u - e_v)), dim=-1)
         h = F.relu(self.decoder_bn(self.decoder_fc1(z)))
@@ -93,12 +133,33 @@ class ThreeHopSkipGNN(nn.Module):
         pairs: torch.Tensor,
         adj_skip: tuple[torch.Tensor, torch.Tensor] | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor]:
+        """Encode with the 1-hop operator and the ``(f_2hop, f_3hop)`` pair.
+
+        Args:
+            x: Node features, dense or sparse ``[N, F]``.
+            f1: Normalized 1-hop operator, sparse ``[N, N]``.
+            pairs: Endpoint indices, long ``[B, 2]``.
+            adj_skip: ``(f_2hop, f_3hop)``, each sparse ``[N, N]``.
+
+        Returns:
+            Logits ``[B]`` and node embeddings ``[N, nhid2]``.
+
+        Raises:
+            ValueError: ``adj_skip`` is not a length-2 sequence.
+        """
         if adj_skip is None or not isinstance(adj_skip, (tuple, list)) or len(adj_skip) != 2:
             raise ValueError("ThreeHopSkipGNN requires adj_skip=(f_2hop, f_3hop)")
         emb = self.encode(x, f1, adj_skip[0], adj_skip[1])
         return self.decode(emb, pairs), emb
 
 
-def build_three_hop_matrices(adj):
-    """Kept for the spec import path; loader uses normalization.build_three_hop_return."""
+def build_three_hop_matrices(adj: sp.spmatrix) -> sp.coo_matrix:
+    """Kept for the spec import path; loader uses normalization.build_three_hop_return.
+
+    Args:
+        adj: Square adjacency.
+
+    Returns:
+        The 3-walk operator from :func:`build_three_hop_return`.
+    """
     return build_three_hop_return(adj)

@@ -31,11 +31,22 @@ def build_model(
     decoder_hidden: int = 64,
     dropout: float = 0.5,
 ) -> nn.Module:
-    """Build a named model whose width matches `bundle.n_features`.
+    """Build a named model whose width matches ``bundle.n_features``.
 
     Known names: ``gcn``, ``skipgnn``, ``ams``, ``gat``, ``3hop``, ``contrastive``.
     Ablation aliases (``weighted``, ``gated``, ``full``, …) are handled by
     :func:`make_ablation`.
+
+    Args:
+        name: Model key or alias (case-insensitive).
+        bundle: Dataset whose ``n_features`` sets the encoder input width.
+        hidden1: First hidden width.
+        hidden2: Embedding width.
+        decoder_hidden: Pair-decoder hidden width.
+        dropout: Dropout probability forwarded to the model.
+
+    Returns:
+        A module with ``encode``, ``decode``, and ``skip_kind``.
     """
     kwargs = dict(
         nfeat=int(bundle.n_features),

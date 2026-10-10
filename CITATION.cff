@@ -1,0 +1,31 @@
+cff-version: 1.2.0
+title: Enhanced-SkipGNN
+message: If you use this software, please cite this repository and the preferred-citation SkipGNN paper. The repository compares several skip-graph predictors; AMS-SkipGNN is one of them.
+type: software
+authors:
+  - name: aryonmt
+repository-code: https://github.com/aryonmt/Enhanced-SkipGNN
+url: https://github.com/aryonmt/Enhanced-SkipGNN
+license: MIT
+version: 0.1.0
+preferred-citation:
+  type: article
+  title: "SkipGNN: predicting molecular interactions with skip-graph networks"
+  authors:
+    - family-names: Huang
+      given-names: Kexin
+    - family-names: Xiao
+      given-names: Cao
+    - family-names: Glass
+      given-names: Lucas M.
+    - family-names: Zitnik
+      given-names: Marinka
+    - family-names: Sun
+      given-names: Jimeng
+  journal: Scientific Reports
+  volume: 10
+  issue: 1
+  pages: "21092"
+  year: 2020
+  doi: 10.1038/s41598-020-77766-9
+  url: https://doi.org/10.1038/s41598-020-77766-9

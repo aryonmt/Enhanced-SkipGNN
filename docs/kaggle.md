@@ -14,7 +14,7 @@ Settings:
 - Internet: **on** (the first cell clones this GitHub repo)
 - **Save Version → Save & Run All** (not “Quick Save”)
 
-The notebook clones `https://github.com/aryonmt/finalProject.git` branch `main` (override with env `REPO_BRANCH`), `pip install -e .`, then runs `scripts/run_benchmark.py` as subprocesses.
+The notebook clones `https://github.com/aryonmt/Enhanced-SkipGNN.git` branch `main` (override with env `REPO_BRANCH`), `pip install -e .`, then runs `scripts/run_benchmark.py` as subprocesses. Hardware and install details live in the [README quickstart](../README.md) and in `environment.yml`.
 
 Default **`STAGE=0`** is a DTI `--quick` smoke so a Save & Run All cannot accidentally retrain GDI for hours. Set `STAGE=5` only to redo GDI extras.
 

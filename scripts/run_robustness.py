@@ -1,3 +1,5 @@
+"""Retrain after randomly dropping train edges."""
+
 from __future__ import annotations
 
 import argparse

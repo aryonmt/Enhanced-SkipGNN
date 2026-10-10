@@ -1,3 +1,5 @@
+"""t-SNE figures from saved node-embedding archives."""
+
 from __future__ import annotations
 
 import argparse

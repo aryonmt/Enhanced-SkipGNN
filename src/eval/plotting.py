@@ -107,6 +107,12 @@ def _footnote(fig: plt.Figure, text: str) -> None:
 
 
 def plot_ablation_ladder(df: pd.DataFrame, out_path: Path) -> None:
+    """Bar chart of hard AUPRC by ablation step and dataset.
+
+    Args:
+        df: Rows with ``step``, ``dataset``, and ``hard_auprc``.
+        out_path: PNG path. Parent directories are not created here.
+    """
     plot_df = df.copy()
     plot_df["step_label"] = plot_df["step"].map(lambda s: ABLATION_LABELS.get(str(s), str(s)))
     order = [ABLATION_LABELS[k] for k in ABLATION_LABELS if ABLATION_LABELS[k] in set(plot_df["step_label"])]
@@ -136,6 +142,12 @@ def plot_ablation_ladder(df: pd.DataFrame, out_path: Path) -> None:
 
 
 def plot_robustness(df: pd.DataFrame, out_path: Path) -> None:
+    """Line chart of test AUPRC against missing-edge fraction.
+
+    Args:
+        df: Rows with ``model``, ``missing_frac``, ``auprc_mean``, and ``auprc_std``.
+        out_path: PNG path.
+    """
     fig, ax = plt.subplots(figsize=(7.4, 4.6))
     for model, sub in df.groupby("model"):
         key = _model_key(model)
@@ -166,7 +178,12 @@ def plot_pr_grid(
     curves: dict[str, dict[str, tuple[np.ndarray, np.ndarray]]],
     out_path: Path,
 ) -> None:
-    """One panel per dataset; overlay every model that has a seed-42 PR array."""
+    """One panel per dataset; overlay every model that has a seed-42 PR array.
+
+    Args:
+        curves: ``dataset -> model -> (precision, recall)`` arrays.
+        out_path: PNG path.
+    """
     names = [d for d in DATASET_ORDER if d in curves] or list(curves.keys())
     fig, axes = plt.subplots(2, 2, figsize=(8.6, 8.6))
     for ax, name in zip(axes.ravel(), names):
@@ -205,6 +222,12 @@ def plot_pr_grid(
 
 
 def write_summary(payload: dict[str, Any], out_path: Path) -> None:
+    """Write ``payload`` as indented JSON, creating parent directories.
+
+    Args:
+        payload: JSON-serializable summary.
+        out_path: Destination path.
+    """
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(json.dumps(payload, indent=2), encoding="utf-8")
 
@@ -252,6 +275,12 @@ def _seed_metric_frame(df: pd.DataFrame, metric: str, fallback: str | None = Non
 
 
 def plot_all_models_uniform_hard(df: pd.DataFrame, out_path: Path) -> None:
+    """Side-by-side uniform and hard AUPRC bars (mean ± SD over seeds).
+
+    Args:
+        df: Benchmark rows with ``dataset``, ``model``, and AUPRC columns.
+        out_path: PNG path. No file is written when both panels are empty.
+    """
     uni = _seed_metric_frame(df, "uniform_auprc", "auprc")
     hard = _seed_metric_frame(df, "hard_auprc")
     if uni.empty and hard.empty:
@@ -291,7 +320,12 @@ def plot_all_models_uniform_hard(df: pd.DataFrame, out_path: Path) -> None:
 
 
 def plot_delta_hard_auprc(df: pd.DataFrame, out_path: Path) -> None:
-    """Hard AUPRC of every model minus AMS on that dataset (AMS = 0)."""
+    """Hard AUPRC of every model minus AMS on that dataset (AMS = 0).
+
+    Args:
+        df: Benchmark rows with ``dataset``, ``model``, and ``hard_auprc``.
+        out_path: PNG path. No file is written when AMS or the other models are missing.
+    """
     rows = []
     for dataset in DATASET_ORDER:
         group = df[df["dataset"] == dataset]
@@ -337,6 +371,12 @@ def plot_delta_hard_auprc(df: pd.DataFrame, out_path: Path) -> None:
 
 
 def plot_hard_auprc_box(df: pd.DataFrame, out_path: Path) -> None:
+    """Box plot of hard AUPRC by dataset and model.
+
+    Args:
+        df: Benchmark rows with ``dataset``, ``model``, and ``hard_auprc``.
+        out_path: PNG path. No file is written when ``hard_auprc`` is entirely missing.
+    """
     sub = df.dropna(subset=["hard_auprc"]).copy()
     if sub.empty:
         return
@@ -365,6 +405,12 @@ def plot_hard_auprc_box(df: pd.DataFrame, out_path: Path) -> None:
 
 
 def plot_uniform_vs_hard_auroc(df: pd.DataFrame, out_path: Path) -> None:
+    """Side-by-side uniform and hard AUROC bars (mean ± SD over seeds).
+
+    Args:
+        df: Benchmark rows with ``dataset``, ``model``, and AUROC columns.
+        out_path: PNG path. No file is written when both panels are empty.
+    """
     uni = _seed_metric_frame(df, "uniform_auroc", "auroc")
     hard = _seed_metric_frame(df, "hard_auroc")
     if uni.empty and hard.empty:
@@ -404,7 +450,12 @@ def plot_uniform_vs_hard_auroc(df: pd.DataFrame, out_path: Path) -> None:
 
 
 def plot_hard_auprc_heatmap(df: pd.DataFrame, out_path: Path) -> None:
-    """Mean hard AUPRC, dataset × model. Blank cells were never trained."""
+    """Mean hard AUPRC, dataset × model. Blank cells were never trained.
+
+    Args:
+        df: Benchmark rows with ``dataset``, ``model``, and ``hard_auprc``.
+        out_path: PNG path. No file is written when ``hard_auprc`` is entirely missing.
+    """
     sub = df.dropna(subset=["hard_auprc"]).copy()
     if sub.empty:
         return
@@ -438,6 +489,12 @@ def plot_hard_auprc_heatmap(df: pd.DataFrame, out_path: Path) -> None:
 
 
 def plot_f1_tau(df: pd.DataFrame, out_path: Path) -> None:
+    """Uniform-test F1 at the validation-chosen threshold, mean ± SD.
+
+    Args:
+        df: Benchmark rows with ``dataset``, ``model``, and ``f1_tau``.
+        out_path: PNG path. No file is written when ``f1_tau`` is missing.
+    """
     panel = _seed_metric_frame(df, "f1_tau")
     if panel.empty:
         return
@@ -464,6 +521,12 @@ def plot_f1_tau(df: pd.DataFrame, out_path: Path) -> None:
 
 
 def plot_learning_curves(results_dir: Path, out_path: Path) -> None:
+    """Validation AUPRC versus epoch from ``summary.json`` histories.
+
+    Args:
+        results_dir: Root searched recursively for ``summary.json``.
+        out_path: PNG path. No file is written when no history rows are found.
+    """
     series: dict[tuple[str, str], list[pd.DataFrame]] = {}
     for path in sorted(_result_files(results_dir, "summary.json")):
         blob = json.loads(path.read_text(encoding="utf-8"))
@@ -509,6 +572,12 @@ def plot_learning_curves(results_dir: Path, out_path: Path) -> None:
 
 
 def write_comparison_table(df: pd.DataFrame, out_path: Path) -> None:
+    """Write mean uniform/hard AUPRC and AUROC, one row per dataset and model.
+
+    Args:
+        df: Benchmark rows. ``seed`` is used only to count distinct seeds.
+        out_path: CSV path. Parent directories are created.
+    """
     rows = []
     for (dataset, model), group in df.groupby(["dataset", "model"]):
         rows.append(
@@ -530,7 +599,11 @@ def write_comparison_table(df: pd.DataFrame, out_path: Path) -> None:
 
 
 def tidy_benchmark_csvs(results_dir: Path) -> None:
-    """Stable column order and sort so git diffs stay readable."""
+    """Stable column order and model/seed sort so git diffs stay readable.
+
+    Args:
+        results_dir: Root searched recursively for ``benchmark.csv``. Files are overwritten.
+    """
     preferred = [
         "dataset",
         "model",
@@ -558,7 +631,14 @@ def tidy_benchmark_csvs(results_dir: Path) -> None:
 
 
 def select_pr_curve_files(paths: list[Path]) -> dict[str, Path]:
-    """Prefer `pr_ams_seed42.npz` per dataset (legacy helper used by tests)."""
+    """Prefer ``pr_ams_seed42.npz`` per dataset (legacy helper used by tests).
+
+    Args:
+        paths: PR ``.npz`` paths. The parent directory name is the dataset key.
+
+    Returns:
+        One path per dataset directory.
+    """
     by_dataset: dict[str, list[Path]] = {}
     for path in paths:
         by_dataset.setdefault(path.parent.name, []).append(path)
@@ -572,7 +652,14 @@ def select_pr_curve_files(paths: list[Path]) -> dict[str, Path]:
 
 
 def collect_pr_curves_seed42(paths: list[Path]) -> dict[str, dict[str, Path]]:
-    """dataset → model → npz path, preferring seed 42."""
+    """Map each dataset and model to one PR ``.npz``, preferring seed 42.
+
+    Args:
+        paths: Files named ``pr_<model>_seed<int>.npz``.
+
+    Returns:
+        ``dataset -> model -> path``. Stems that do not match are skipped.
+    """
     grouped: dict[str, dict[str, list[tuple[int, Path]]]] = {}
     for path in paths:
         stem = path.stem
@@ -597,6 +684,14 @@ def generate_all_figures(
     output_dir: str | Path,
     skip_tsne: bool = False,
 ) -> None:
+    """Rebuild the paper figures from cached CSVs, summaries, and PR arrays.
+
+    Args:
+        results_dir: Root of ``benchmark.csv``, ``ablation.csv``, ``robustness.csv``,
+            ``summary.json``, and ``pr_*.npz``.
+        output_dir: PNG directory. Created if missing.
+        skip_tsne: When true, do not read ``embeddings_*.npz``.
+    """
     results_dir = Path(results_dir)
     output_dir = _ensure_dir(Path(output_dir))
     tidy_benchmark_csvs(results_dir)
@@ -643,6 +738,15 @@ def generate_all_figures(
 
 
 def pr_arrays(labels: np.ndarray, probs: np.ndarray) -> tuple[np.ndarray, np.ndarray]:
+    """Precision and recall arrays from ``precision_recall_curve``.
+
+    Args:
+        labels: 1-D binary labels.
+        probs: 1-D scores, same length as ``labels``.
+
+    Returns:
+        ``(precision, recall)`` with the threshold column dropped.
+    """
     prec, rec, _ = precision_recall_curve(labels, probs)
     return prec, rec
 
@@ -664,6 +768,17 @@ def plot_embedding_tsne(
     seed: int = 42,
     max_points: int = 4000,
 ) -> None:
+    """Scatter a 2-D t-SNE of node embeddings, colored by node type.
+
+    Args:
+        embeddings: Node embeddings ``[N, D]``.
+        n_source: First ``n_source`` rows are the source type.
+        dataset: Name used for axis labels (``DTI``, ``GDI``, ``DDI``, ``PPI``).
+        model: Model key used in the title.
+        out_path: PNG path.
+        seed: NumPy and t-SNE seed.
+        max_points: Subsample size when ``N`` is larger.
+    """
     from sklearn.manifold import TSNE
 
     emb = np.asarray(embeddings, dtype=np.float32)
@@ -694,6 +809,12 @@ def plot_embedding_tsne(
 
 
 def plot_saved_embedding_tsne(results_dir: Path, output_dir: Path) -> None:
+    """Write one t-SNE figure per saved ``embeddings_*.npz``.
+
+    Args:
+        results_dir: Root searched recursively for embedding archives.
+        output_dir: PNG directory. Created when at least one archive exists.
+    """
     files = sorted(_result_files(results_dir, "embeddings_*.npz"))
     if not files:
         return

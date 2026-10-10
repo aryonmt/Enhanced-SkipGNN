@@ -1,3 +1,5 @@
+"""Dual-view SkipGNN with a batch InfoNCE term."""
+
 from __future__ import annotations
 
 import torch
@@ -8,7 +10,14 @@ from src.models.layers import SparseGraphConvolution
 
 
 class ContrastiveSkipGNN(nn.Module):
-    """Dual-view encoder: original vs skip graph, aligned with batch InfoNCE."""
+    """Dual-view encoder: original vs skip graph, aligned with batch InfoNCE.
+
+    Training ``forward`` returns logits, embeddings, and the contrastive term.
+    Eval ``forward`` returns logits and embeddings only.
+
+    Attributes:
+        skip_kind: ``"weighted"``.
+    """
 
     skip_kind = "weighted"
 
@@ -22,7 +31,19 @@ class ContrastiveSkipGNN(nn.Module):
         proj_dim: int = 32,
         tau: float = 0.2,
         lambda_cl: float = 0.1,
-    ):
+    ) -> None:
+        """Build the two view encoders, the gate, the projectors, and the decoder.
+
+        Args:
+            nfeat: Input feature width ``F``.
+            nhid1: Width of the first graph convolution in each view.
+            nhid2: Embedding width of each view.
+            nhid_dec: Hidden width of the pair decoder.
+            dropout: Dropout probability inside each view and the decoder.
+            proj_dim: Width of the InfoNCE projection head.
+            tau: InfoNCE temperature.
+            lambda_cl: Contrastive weight read by the trainer (not applied inside ``forward``).
+        """
         super().__init__()
         self.dropout = dropout
         self.tau = tau
@@ -44,6 +65,17 @@ class ContrastiveSkipGNN(nn.Module):
         f_orig: torch.Tensor,
         f_skip: torch.Tensor,
     ) -> tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Encode both views and gate them into one embedding.
+
+        Args:
+            x: Node features, dense or sparse ``[N, F]``.
+            f_orig: Normalized original adjacency, sparse ``[N, N]``.
+            f_skip: Normalized skip operator, sparse ``[N, N]``.
+
+        Returns:
+            Fused embeddings ``[N, nhid2]``, original-view states ``[N, nhid2]``,
+            and skip-view states ``[N, nhid2]``.
+        """
         h_o1 = F.dropout(F.relu(self.o_gc1(x, f_orig)), self.dropout, training=self.training)
         h_o2 = self.o_gc2(h_o1, f_orig)
         h_s1 = F.dropout(F.relu(self.s_gc1(x, f_skip)), self.dropout, training=self.training)
@@ -53,6 +85,16 @@ class ContrastiveSkipGNN(nn.Module):
         return emb, h_o2, h_s2
 
     def contrastive_loss(self, h_o2: torch.Tensor, h_s2: torch.Tensor, node_ids: torch.Tensor) -> torch.Tensor:
+        """Symmetric InfoNCE between the original and skip views on unique nodes.
+
+        Args:
+            h_o2: Original-view states ``[N, nhid2]``.
+            h_s2: Skip-view states ``[N, nhid2]``.
+            node_ids: Flat node indices (the trainer passes ``pairs.reshape(-1)``).
+
+        Returns:
+            Scalar loss. Zero when fewer than two unique nodes are present.
+        """
         unique_nodes = torch.unique(node_ids)
         if unique_nodes.numel() <= 1:
             return h_o2.new_zeros(())
@@ -63,6 +105,15 @@ class ContrastiveSkipGNN(nn.Module):
         return 0.5 * (F.cross_entropy(logits, labels) + F.cross_entropy(logits.t(), labels))
 
     def decode(self, emb: torch.Tensor, pairs: torch.Tensor) -> torch.Tensor:
+        """Score pairs with the 4-way decoder.
+
+        Args:
+            emb: Node embeddings ``[N, nhid2]``.
+            pairs: Endpoint indices, long ``[B, 2]``.
+
+        Returns:
+            Link logits ``[B]``.
+        """
         e_u, e_v = emb[pairs[:, 0]], emb[pairs[:, 1]]
         z = torch.cat((e_u, e_v, e_u * e_v, torch.abs(e_u - e_v)), dim=-1)
         h = F.relu(self.decoder_bn(self.decoder_fc1(z)))
@@ -76,6 +127,21 @@ class ContrastiveSkipGNN(nn.Module):
         pairs: torch.Tensor,
         adj_skip: torch.Tensor | None = None,
     ) -> tuple[torch.Tensor, torch.Tensor] | tuple[torch.Tensor, torch.Tensor, torch.Tensor]:
+        """Encode, score ``pairs``, and add InfoNCE while training.
+
+        Args:
+            x: Node features, dense or sparse ``[N, F]``.
+            adj: Normalized original adjacency, sparse ``[N, N]``.
+            pairs: Endpoint indices, long ``[B, 2]``.
+            adj_skip: Normalized skip operator, sparse ``[N, N]``.
+
+        Returns:
+            Eval: logits ``[B]`` and embeddings ``[N, nhid2]``.
+            Train: those two plus a scalar contrastive loss.
+
+        Raises:
+            ValueError: ``adj_skip`` is missing.
+        """
         if adj_skip is None:
             raise ValueError("ContrastiveSkipGNN requires adj_skip")
         emb, h_o2, h_s2 = self.encode(x, adj, adj_skip)

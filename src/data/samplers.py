@@ -14,7 +14,21 @@ def generate_uniform_negatives(
     bipartite: bool = False,
     n_source: int | None = None,
 ) -> np.ndarray:
-    """Sample negatives uniformly, never repeating a known positive."""
+    """Sample negatives uniformly, never repeating a known positive.
+
+    Args:
+        n_nodes: Number of nodes. Non-bipartite endpoints are drawn from ``[0, n_nodes)``.
+        n_samples: Number of pairs to return.
+        known_positives: Edges that must not be resampled. Undirected graphs also
+            reject the swapped pair.
+        rng: NumPy generator.
+        bipartite: Draw the first endpoint from sources and the second from targets.
+        n_source: Source-node count. Required when ``bipartite`` is true; otherwise
+            it defaults to ``n_nodes``.
+
+    Returns:
+        Integer pairs ``[n_samples, 2]``.
+    """
     pairs: list[tuple[int, int]] = []
     n_source = n_nodes if n_source is None else n_source
     while len(pairs) < n_samples:
@@ -43,7 +57,23 @@ def generate_bipartite_aware_hard_negatives(
     num_target_nodes: int,
     seed: int = 42,
 ) -> np.ndarray:
-    """Degree-quartile negatives that stay on the correct side of a bipartite cut."""
+    """Degree-quartile negatives that stay on the correct side of a bipartite cut.
+
+    One negative is drawn for each row of ``positive_pairs``. The replacement
+    target is sampled from the same degree quartile as the original target.
+
+    Args:
+        positive_pairs: Positive endpoint indices ``[P, 2]``.
+        train_adj: Train-positive adjacency used only for node degrees.
+        known_positives: Edges that must not be proposed as negatives.
+        is_bipartite: Keep the negative target on the target side of the cut.
+        num_source_nodes: Index where target nodes begin when ``is_bipartite``.
+        num_target_nodes: Accepted for call-site compatibility. Not used.
+        seed: NumPy generator seed.
+
+    Returns:
+        Negative pairs ``[P, 2]``, int64, one row per positive.
+    """
     rng = np.random.default_rng(seed)
     total_nodes = train_adj.shape[0]
     degrees = np.asarray(train_adj.sum(axis=1)).flatten()
